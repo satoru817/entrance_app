@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NFCカードUID読み取り</title>
+
+    <!-- PWA関連のメタタグ -->
+    <link rel="manifest" href="manifest.json" />
+    <meta name="theme-color" content="#4a90e2" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+    <link rel="apple-touch-icon" href="icons/icon-192x192.png" />
+
+    <link rel="stylesheet" href="style.css" />
+    <style>
+      .uid-box {
+        background-color: #f8f9fa;
+        border: 2px solid #4a90e2;
+        border-radius: 8px;
+        padding: 20px;
+        margin: 20px 0;
+        text-align: center;
+      }
+
+      .uid-value {
+        font-size: 24px;
+        font-weight: bold;
+        margin: 15px 0;
+        word-break: break-all;
+        font-family: monospace;
+      }
+
+      .uid-history {
+        margin-top: 20px;
+        text-align: left;
+        max-height: 200px;
+        overflow-y: auto;
+        background-color: #fff;
+        border-radius: 8px;
+        padding: 10px;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+      }
+
+      .history-item {
+        padding: 8px;
+        border-bottom: 1px solid #eee;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .copy-button {
+        background-color: #6c757d;
+        color: white;
+        border: none;
+        padding: 5px 10px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>NFCカードUID読み取り</h1>
+
+      <div class="uid-box">
+        <div id="status" class="status-box scanning">
+          <p>カードをかざしてください</p>
+        </div>
+
+        <div id="uidDisplay" class="uid-value">-</div>
+
+        <button id="copyButton" class="primary-button">UIDをコピー</button>
+        <button id="resetButton" class="secondary-button">リセット</button>
+      </div>
+
+      <div class="uid-history">
+        <h3>読み取り履歴</h3>
+        <div id="historyList"></div>
+      </div>
+
+      <a href="index.html" class="navigation-button">入退室管理に戻る</a>
+    </div>
+
+    <script>
+      document.addEventListener("DOMContentLoaded", () => {
+        const status = document.getElementById("status");
+        const uidDisplay = document.getElementById("uidDisplay");
+        const copyButton = document.getElementById("copyButton");
+        const resetButton = document.getElementById("resetButton");
+        const historyList = document.getElementById("historyList");
+
+        let isReading = false;
+        let currentUID = null;
+
+        // Service Workerの登録
+        if ("serviceWorker" in navigator) {
+          window.addEventListener("load", () => {
+            navigator.serviceWorker
+              .register("./service-worker.js")
+              .then((registration) => {
+                console.log(
+                  "ServiceWorker registration successful with scope: ",
+                  registration.scope
+                );
+              })
+              .catch((err) => {
+                console.log("ServiceWorker registration failed: ", err);
+              });
+          });
+        }
+
+        // NFCスキャン開始
+        async function startNfcScan() {
+          if ("NDEFReader" in window) {
+            try {
+              status.innerHTML = "<p>カードをかざしてください</p>";
+              status.className = "status-box scanning";
+
+              const ndef = new NDEFReader();
+              await ndef.scan();
+
+              ndef.addEventListener("reading", ({ serialNumber }) => {
+                if (serialNumber && !isReading) {
+                  isReading = true;
+
+                  // UIDを表示
+                  currentUID = serialNumber;
+                  uidDisplay.textContent = serialNumber;
+
+                  // 成功表示
+                  status.innerHTML = "<p>カードを読み取りました</p>";
+                  status.className = "status-box success";
+
+                  // 履歴に追加
+                  addToHistory(serialNumber);
+
+                  // ビープ音
+                  playBeepSound();
+
+                  // 2秒後に再スキャン準備
+                  setTimeout(() => {
+                    status.innerHTML = "<p>カードをかざしてください</p>";
+                    status.className = "status-box scanning";
+                    isReading = false;
+                  }, 2000);
+                }
+              });
+
+              console.log("NFC読み取りを開始しました");
+            } catch (error) {
+              status.innerHTML = `<p>エラー: ${error.message}</p>`;
+              status.className = "status-box error";
+              console.error("NFC読み取りエラー:", error);
+            }
+          } else {
+            status.innerHTML =
+              "<p>このブラウザはNFC APIをサポートしていません</p>";
+            status.className = "status-box error";
+          }
+        }
+
+        // 履歴に追加
+        function addToHistory(uid) {
+          const now = new Date();
+          const timestamp = now.toLocaleTimeString();
+
+          const historyItem = document.createElement("div");
+          historyItem.className = "history-item";
+
+          const textSpan = document.createElement("span");
+          textSpan.textContent = `${timestamp}: ${uid}`;
+
+          const copyBtn = document.createElement("button");
+          copyBtn.className = "copy-button";
+          copyBtn.textContent = "コピー";
+          copyBtn.onclick = () => {
+            navigator.clipboard
+              .writeText(uid)
+              .then(() => {
+                copyBtn.textContent = "✓";
+                setTimeout(() => {
+                  copyBtn.textContent = "コピー";
+                }, 1500);
+              })
+              .catch((err) => {
+                console.error("コピーに失敗しました", err);
+              });
+          };
+
+          historyItem.appendChild(textSpan);
+          historyItem.appendChild(copyBtn);
+
+          historyList.prepend(historyItem);
+
+          // 履歴は最大10件
+          if (historyList.children.length > 10) {
+            historyList.removeChild(historyList.lastChild);
+          }
+
+          // ローカルストレージに保存
+          saveHistory();
+        }
+
+        // 履歴の保存
+        function saveHistory() {
+          const historyItems = [];
+          for (let i = 0; i < historyList.children.length; i++) {
+            const item = historyList.children[i];
+            const text = item.getElementsByTagName("span")[0].textContent;
+            historyItems.push(text);
+          }
+
+          localStorage.setItem("uidHistory", JSON.stringify(historyItems));
+        }
+
+        // 履歴の読み込み
+        function loadHistory() {
+          const savedHistory = localStorage.getItem("uidHistory");
+          if (savedHistory) {
+            const historyItems = JSON.parse(savedHistory);
+            historyItems.forEach((item) => {
+              const parts = item.split(": ");
+              if (parts.length === 2) {
+                const timestamp = parts[0];
+                const uid = parts[1];
+
+                const historyItem = document.createElement("div");
+                historyItem.className = "history-item";
+
+                const textSpan = document.createElement("span");
+                textSpan.textContent = item;
+
+                const copyBtn = document.createElement("button");
+                copyBtn.className = "copy-button";
+                copyBtn.textContent = "コピー";
+                copyBtn.onclick = () => {
+                  navigator.clipboard.writeText(uid).then(() => {
+                    copyBtn.textContent = "✓";
+                    setTimeout(() => {
+                      copyBtn.textContent = "コピー";
+                    }, 1500);
+                  });
+                };
+
+                historyItem.appendChild(textSpan);
+                historyItem.appendChild(copyBtn);
+
+                historyList.appendChild(historyItem);
+              }
+            });
+          }
+        }
+
+        // ビープ音
+        function playBeepSound() {
+          const beep = new Audio(
+            "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3"
+          );
+          beep
+            .play()
+            .catch((e) => console.log("音の再生ができませんでした", e));
+        }
+
+        // UIDのコピー
+        copyButton.addEventListener("click", () => {
+          if (currentUID) {
+            navigator.clipboard
+              .writeText(currentUID)
+              .then(() => {
+                copyButton.textContent = "コピーしました";
+                setTimeout(() => {
+                  copyButton.textContent = "UIDをコピー";
+                }, 1500);
+              })
+              .catch((err) => {
+                console.error("クリップボードへのコピーに失敗しました", err);
+                alert("コピーに失敗しました");
+              });
+          } else {
+            alert("まだカードが読み取られていません");
+          }
+        });
+
+        // リセットボタン
+        resetButton.addEventListener("click", () => {
+          uidDisplay.textContent = "-";
+          currentUID = null;
+          status.innerHTML = "<p>カードをかざしてください</p>";
+          status.className = "status-box scanning";
+          isReading = false;
+        });
+
+        // 初期処理
+        loadHistory();
+        startNfcScan();
+
+        // ページがフォーカスを失ったり再取得した時の対応
+        document.addEventListener("visibilitychange", () => {
+          if (document.visibilityState === "visible") {
+            isReading = false;
+            startNfcScan();
+          }
+        });
+      });
+    </script>
+  </body>
+</html>

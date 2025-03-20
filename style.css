@@ -5,6 +5,22 @@ body {
   padding: 0;
 }
 
+/* 遷移ボタン用スタイル */
+.navigation-button {
+  display: inline-block;
+  background-color: #6c757d;
+  color: white;
+  text-decoration: none;
+  padding: 12px 24px;
+  border-radius: 4px;
+  margin: 8px;
+  font-size: 16px;
+}
+
+.navigation-button:hover {
+  background-color: #5a6268;
+}
+
 .container {
   max-width: 500px;
   margin: 0 auto;
