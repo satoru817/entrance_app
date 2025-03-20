@@ -5,6 +5,50 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>塾入退室管理</title>
     <link rel="stylesheet" href="style.css" />
+
+    <!-- PWA関連のメタタグ追加 -->
+    <link rel="manifest" href="manifest.json" />
+    <meta name="theme-color" content="#4a90e2" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+    <link rel="apple-touch-icon" href="icons/icon-192x192.png" />
+
+    <!-- iOSでのスプラッシュスクリーン -->
+    <link
+      rel="apple-touch-startup-image"
+      href="icons/splash-640x1136.png"
+      media="(device-width: 320px) and (device-height: 568px) and (-webkit-device-pixel-ratio: 2)"
+    />
+    <link
+      rel="apple-touch-startup-image"
+      href="icons/splash-750x1334.png"
+      media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2)"
+    />
+    <link
+      rel="apple-touch-startup-image"
+      href="icons/splash-1242x2208.png"
+      media="(device-width: 414px) and (device-height: 736px) and (-webkit-device-pixel-ratio: 3)"
+    />
+    <link
+      rel="apple-touch-startup-image"
+      href="icons/splash-1125x2436.png"
+      media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3)"
+    />
+    <link
+      rel="apple-touch-startup-image"
+      href="icons/splash-1536x2048.png"
+      media="(min-device-width: 768px) and (max-device-width: 1024px) and (-webkit-device-pixel-ratio: 2)"
+    />
+    <link
+      rel="apple-touch-startup-image"
+      href="icons/splash-1668x2224.png"
+      media="(min-device-width: 834px) and (max-device-width: 834px) and (-webkit-device-pixel-ratio: 2)"
+    />
+    <link
+      rel="apple-touch-startup-image"
+      href="icons/splash-2048x2732.png"
+      media="(min-device-width: 1024px) and (max-device-width: 1024px) and (-webkit-device-pixel-ratio: 2)"
+    />
   </head>
   <body>
     <div class="container">
@@ -15,14 +59,51 @@
       </div>
 
       <button id="manualButton" class="secondary-button">手動入力</button>
+      <div id="offline-message" class="hidden">
+        <p>オフラインモードです</p>
+      </div>
     </div>
 
     <script>
+      // Service Workerの登録
+      if ("serviceWorker" in navigator) {
+        window.addEventListener("load", () => {
+          navigator.serviceWorker
+            .register("./service-worker.js")
+            .then((registration) => {
+              console.log(
+                "ServiceWorker registration successful with scope: ",
+                registration.scope
+              );
+            })
+            .catch((err) => {
+              console.log("ServiceWorker registration failed: ", err);
+            });
+        });
+      }
+
       document.addEventListener("DOMContentLoaded", () => {
         const statusBox = document.getElementById("status");
         const manualButton = document.getElementById("manualButton");
+        const offlineMessage = document.getElementById("offline-message");
         let isReading = false;
         let timeoutId = null;
+        let lastReadTime = Date.now();
+
+        // オンライン・オフライン状態の監視
+        window.addEventListener("online", handleNetworkChange);
+        window.addEventListener("offline", handleNetworkChange);
+
+        function handleNetworkChange() {
+          if (navigator.onLine) {
+            offlineMessage.classList.add("hidden");
+          } else {
+            offlineMessage.classList.remove("hidden");
+          }
+        }
+
+        // 初期チェック
+        handleNetworkChange();
 
         // 自動的にNFCスキャンを開始
         async function startNfcScan() {
@@ -37,6 +118,7 @@
               ndef.addEventListener("reading", ({ serialNumber }) => {
                 if (serialNumber && !isReading) {
                   isReading = true;
+                  lastReadTime = Date.now();
 
                   // 連続読み取り防止のための音やフィードバック
                   playBeepSound();
@@ -110,7 +192,7 @@
 
           try {
             const response = await fetch(
-              "http://localhost:8080/api/attendance", //ここは実環境に合わせる
+              "http://localhost:8080/api/attendance", //***ここは実環境に合わせる***
               {
                 method: "POST",
                 headers: {
@@ -173,8 +255,6 @@
             isReading = false;
           }
         }, 10000);
-
-        let lastReadTime = Date.now();
 
         // ページがフォーカスを失ったり再取得した時にNFCスキャンを再開
         document.addEventListener("visibilitychange", () => {
