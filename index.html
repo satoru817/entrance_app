@@ -64,7 +64,7 @@
       <a href="uid-reader.html" class="navigation-button">カードUID読み取り</a>
 
       <div id="offline-message" class="hidden">
-        <p>オフラインモードです</p>
+        <p>オフラインモードです.</p>
       </div>
     </div>
 
@@ -88,32 +88,17 @@
 
       document.addEventListener("DOMContentLoaded", () => {
         const statusBox = document.getElementById("status");
+        const scanButton = document.getElementById("scanButton");
         const manualButton = document.getElementById("manualButton");
-        const offlineMessage = document.getElementById("offline-message");
         let isReading = false;
         let timeoutId = null;
-        let lastReadTime = Date.now();
 
-        // オンライン・オフライン状態の監視
-        window.addEventListener("online", handleNetworkChange);
-        window.addEventListener("offline", handleNetworkChange);
-
-        function handleNetworkChange() {
-          if (navigator.onLine) {
-            offlineMessage.classList.add("hidden");
-          } else {
-            offlineMessage.classList.remove("hidden");
-          }
-        }
-
-        // 初期チェック
-        handleNetworkChange();
-
-        // 自動的にNFCスキャンを開始
+        // NFC読み取り関数を定義
         async function startNfcScan() {
           if ("NDEFReader" in window) {
             try {
-              statusBox.innerHTML = "<p>カードをかざしてください</p>";
+              statusBox.innerHTML =
+                "<p>NFCタグをスマホにかざしてください...</p>";
               statusBox.className = "status-box scanning";
 
               const ndef = new NDEFReader();
@@ -122,7 +107,6 @@
               ndef.addEventListener("reading", ({ serialNumber }) => {
                 if (serialNumber && !isReading) {
                   isReading = true;
-                  lastReadTime = Date.now();
 
                   // 連続読み取り防止のための音やフィードバック
                   playBeepSound();
@@ -139,6 +123,7 @@
 
               console.log("NFC読み取りを開始しました");
             } catch (error) {
+              console.error("NFCスキャンエラー:", error);
               statusBox.innerHTML = `<p>エラー: ${error.message}</p>`;
               statusBox.className = "status-box error";
 
@@ -162,25 +147,8 @@
             .catch((e) => console.log("音の再生ができませんでした", e));
         }
 
-        // 成功時の音
-        function playSuccessSound() {
-          const success = new Audio(
-            "https://assets.mixkit.co/active_storage/sfx/213/213-preview.mp3"
-          );
-          success
-            .play()
-            .catch((e) => console.log("音の再生ができませんでした", e));
-        }
-
-        // エラー時の音
-        function playErrorSound() {
-          const error = new Audio(
-            "https://assets.mixkit.co/active_storage/sfx/132/132-preview.mp3"
-          );
-          error
-            .play()
-            .catch((e) => console.log("音の再生ができませんでした", e));
-        }
+        // スキャンボタン
+        scanButton.addEventListener("click", startNfcScan);
 
         // 手動入力ボタン
         manualButton.addEventListener("click", () => {
@@ -196,14 +164,13 @@
 
           try {
             const response = await fetch(
-              "http://localhost:8080/api/attendance", //***ここは実環境に合わせる***
+              "https://your-server.com/api/attendance",
               {
                 method: "POST",
                 headers: {
                   "Content-Type": "application/json",
                 },
                 body: JSON.stringify({ cardId }),
-                mode: "cors", // CORSモードを明示的に指定
               }
             );
 
@@ -212,16 +179,16 @@
             if (data.success) {
               const action = data.type === "ENTRY" ? "入室" : "退室";
               statusBox.innerHTML = `
-                <h2>${data.studentName}さん</h2>
-                <p>${action}を記録しました</p>
-                <p>${new Date().toLocaleTimeString()}</p>
-              `;
+          <h2>${data.studentName}さん</h2>
+          <p>${action}を記録しました</p>
+          <p>${new Date().toLocaleTimeString()}</p>
+        `;
               statusBox.className = "status-box success";
-              playSuccessSound();
 
               // 5秒後に待機画面に戻る
               setTimeout(() => {
-                statusBox.innerHTML = "<p>カードをかざしてください</p>";
+                statusBox.innerHTML =
+                  "<p>NFCタグをスマホにかざしてください...</p>";
                 statusBox.className = "status-box scanning";
               }, 5000);
             } else {
@@ -229,44 +196,19 @@
                 data.message || "不明なエラー"
               }</p>`;
               statusBox.className = "status-box error";
-              playErrorSound();
 
               // 3秒後に待機画面に戻る
               setTimeout(() => {
-                statusBox.innerHTML = "<p>カードをかざしてください</p>";
+                statusBox.innerHTML =
+                  "<p>NFCタグをスマホにかざしてください...</p>";
                 statusBox.className = "status-box scanning";
               }, 3000);
             }
           } catch (error) {
             statusBox.innerHTML = `<p>通信エラー: ${error.message}</p>`;
             statusBox.className = "status-box error";
-            playErrorSound();
-
-            // 3秒後に待機画面に戻る
-            setTimeout(() => {
-              statusBox.innerHTML = "<p>カードをかざしてください</p>";
-              statusBox.className = "status-box scanning";
-            }, 3000);
           }
         }
-
-        // アプリ起動時にNFCスキャンを自動的に開始
-        startNfcScan();
-
-        // 定期的に読み取り状態をリセット (バグ対策)
-        setInterval(() => {
-          if (isReading && Date.now() - lastReadTime > 10000) {
-            isReading = false;
-          }
-        }, 10000);
-
-        // ページがフォーカスを失ったり再取得した時にNFCスキャンを再開
-        document.addEventListener("visibilitychange", () => {
-          if (document.visibilityState === "visible") {
-            // 念のため再スキャン
-            startNfcScan();
-          }
-        });
       });
     </script>
   </body>
